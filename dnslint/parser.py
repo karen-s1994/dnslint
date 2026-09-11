@@ -1,9 +1,11 @@
 """Parse a subset of BIND-style zone file syntax into records.
 
 This does not implement the full RFC 1035 master file grammar -- there is
-no support yet for parenthesized multi-line records or $INCLUDE. It covers
-the single-line record style that the vast majority of hand-written zone
-files actually use, which is enough to build useful checks on top of.
+no support yet for $INCLUDE, and comment stripping doesn't know about
+quoted TXT rdata. It covers the record styles that the vast majority of
+hand-written zone files actually use, including parenthesized records
+that continue across several lines, which is enough to build useful
+checks on top of.
 """
 
 from dataclasses import dataclass, field
@@ -48,17 +50,54 @@ def _strip_comment(raw: str) -> str:
     return raw[:idx] if idx != -1 else raw
 
 
+def _logical_lines(text: str, findings: List[Finding]):
+    """Yield (start_line, has_leading_ws, code) for each logical record.
+
+    A record wrapped in parentheses spans multiple physical lines; this
+    joins them into one so the rest of the parser can keep treating a
+    record as a single whitespace-separated token stream. The parens
+    themselves are dropped rather than tokenized.
+    """
+    paren_depth = 0
+    parts: List[str] = []
+    start_line = 0
+    leading_ws = False
+
+    for line_no, raw_line in enumerate(text.splitlines(), start=1):
+        code = _strip_comment(raw_line.rstrip("\n"))
+        if paren_depth == 0:
+            if not code.strip():
+                continue
+            start_line = line_no
+            leading_ws = code[0] in (" ", "\t")
+
+        paren_depth += code.count("(") - code.count(")")
+        parts.append(code.replace("(", " ").replace(")", " "))
+
+        if paren_depth <= 0:
+            if paren_depth < 0:
+                findings.append(Finding(
+                    line_no, "error", "unbalanced-parens",
+                    "found ')' with no matching '('"))
+            paren_depth = 0
+            yield start_line, leading_ws, " ".join(parts)
+            parts = []
+
+    if parts:
+        findings.append(Finding(
+            start_line, "error", "unbalanced-parens",
+            "record has '(' with no matching ')' before end of file"))
+        yield start_line, leading_ws, " ".join(parts)
+
+
 def parse_zone(text: str) -> ParseResult:
     result = ParseResult()
     current_name: Optional[str] = None
 
-    for line_no, raw_line in enumerate(text.splitlines(), start=1):
-        code = _strip_comment(raw_line.rstrip("\n"))
-        if not code.strip():
-            continue
-
-        has_leading_ws = code[0] in (" ", "\t")
+    for line_no, has_leading_ws, code in _logical_lines(text, result.findings):
         tokens = code.split()
+        if not tokens:
+            continue
         directive = tokens[0].upper()
 
         if directive == "$ORIGIN":

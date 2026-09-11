@@ -66,8 +66,6 @@ conflicts -- always report as errors, `--lenient` or not.
 
 ## What it doesn't do yet
 
-- No support for parenthesized multi-line records (`( ... )` continuations
-  across several lines) -- every record has to fit on one line.
 - No support for `$INCLUDE` (the directive is recognized but the included
   file is not linted).
 - Comment stripping is naive and doesn't understand quoted strings, so a
