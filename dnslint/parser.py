@@ -1,11 +1,10 @@
 """Parse a subset of BIND-style zone file syntax into records.
 
 This does not implement the full RFC 1035 master file grammar -- there is
-no support yet for $INCLUDE, and comment stripping doesn't know about
-quoted TXT rdata. It covers the record styles that the vast majority of
-hand-written zone files actually use, including parenthesized records
-that continue across several lines, which is enough to build useful
-checks on top of.
+no support yet for $INCLUDE. It covers the record styles that the vast
+majority of hand-written zone files actually use, including parenthesized
+records that continue across several lines and quoted TXT rdata, which is
+enough to build useful checks on top of.
 """
 
 from dataclasses import dataclass, field
@@ -44,10 +43,37 @@ class ParseResult:
 
 
 def _strip_comment(raw: str) -> str:
-    # Naive: doesn't know about quoted TXT rdata, so a ';' inside a quoted
-    # string will be treated as a comment start. Good enough for v1.
-    idx = raw.find(";")
-    return raw[:idx] if idx != -1 else raw
+    # A ';' inside a quoted TXT string is data, not a comment start, so
+    # track quote state rather than just scanning for the first ';'.
+    in_quotes = False
+    for i, ch in enumerate(raw):
+        if ch == '"' and raw[i - 1:i] != "\\":
+            in_quotes = not in_quotes
+        elif ch == ";" and not in_quotes:
+            return raw[:i]
+    return raw
+
+
+def _mask_parens(code: str):
+    """Replace '(' and ')' outside quoted strings with spaces.
+
+    Returns the masked line and the net paren-depth change it contributes.
+    A literal '(' or ')' inside quoted TXT rdata isn't a line-continuation
+    marker, so it must not be counted or stripped like one.
+    """
+    in_quotes = False
+    depth = 0
+    out = []
+    for i, ch in enumerate(code):
+        if ch == '"' and code[i - 1:i] != "\\":
+            in_quotes = not in_quotes
+            out.append(ch)
+        elif ch in "()" and not in_quotes:
+            depth += 1 if ch == "(" else -1
+            out.append(" ")
+        else:
+            out.append(ch)
+    return "".join(out), depth
 
 
 def _logical_lines(text: str, findings: List[Finding]):
@@ -71,8 +97,9 @@ def _logical_lines(text: str, findings: List[Finding]):
             start_line = line_no
             leading_ws = code[0] in (" ", "\t")
 
-        paren_depth += code.count("(") - code.count(")")
-        parts.append(code.replace("(", " ").replace(")", " "))
+        masked, depth_delta = _mask_parens(code)
+        paren_depth += depth_delta
+        parts.append(masked)
 
         if paren_depth <= 0:
             if paren_depth < 0:

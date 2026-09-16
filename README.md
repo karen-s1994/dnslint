@@ -68,8 +68,6 @@ conflicts -- always report as errors, `--lenient` or not.
 
 - No support for `$INCLUDE` (the directive is recognized but the included
   file is not linted).
-- Comment stripping is naive and doesn't understand quoted strings, so a
-  `;` inside quoted `TXT` rdata will be misread as a comment.
 
 ## Requirements
 
