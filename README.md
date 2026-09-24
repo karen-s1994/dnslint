@@ -72,3 +72,12 @@ conflicts -- always report as errors, `--lenient` or not.
 ## Requirements
 
 Python 3.9 or later. No third-party dependencies.
+
+## Running the tests
+
+Tests use only the standard library `unittest` module and live under `tests/`,
+with sample zone files under `tests/fixtures/`:
+
+```
+$ python -m unittest discover
+```

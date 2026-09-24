@@ -1,0 +1,10 @@
+$ORIGIN example.com.
+$TTL 3600
+
+@       IN  SOA   ns1.example.com. hostmaster.example.com. 2024031501 7200 3600 1209600 3600
+@       IN  NS    ns1.example.com.
+@       IN  NS    ns2.example.com.
+
+www     IN  A     192.0.2.10
+mail    IN  MX    10 mail.example.com.
+ftp     IN  CNAME www.example.com.

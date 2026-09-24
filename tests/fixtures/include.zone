@@ -1,0 +1,5 @@
+$ORIGIN example.com.
+$TTL 3600
+$INCLUDE other.zone
+
+@       IN  SOA   ns1.example.com. hostmaster.example.com. 2024031501 7200 3600 1209600 3600
